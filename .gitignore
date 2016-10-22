@@ -1,0 +1,5 @@
+*.so
+*.pyc
+*.swp
+*.tmp
+rpi-rgb-led-matrix/examples-api-use/c-example
