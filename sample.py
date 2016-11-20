@@ -9,6 +9,8 @@ def usleep(value):
 class Display():
     DONE_ROW = 'Done scrolling row'
 
+    # Expects parsed_args to contain:
+    #	rows (int), chain (int), parallel (int), pwmbits (int), luminance (bool), brightness (int)
     def __init__(self, parsed_args, *args, **kwargs):
 	# Setup screen's variables
 	self.TOP_ROW    = 10
@@ -35,14 +37,14 @@ class Display():
         self.on_screen = { self.TOP_ROW : {}, self.MIDDLE_ROW : {}, self.BOTTOM_ROW : {} }
 	self.to_be_displayed = {
 	    self.TOP_ROW : [ 
-		{'font': self.BOLD, 'scroll': False, 'text': '17:25 PM'}
+		{'font': self.BOLD, 'scroll': False, 'text': time.strftime("%H:%M %p")}
 	    ],
 	    self.MIDDLE_ROW : [
-		{'font': self.REGULAR, 'scroll': False, 'text': ''}
+		{'font': self.REGULAR, 'scroll': False, 'text': 'Bus Times'}
 	    ],
 	    self.BOTTOM_ROW : [
-		{'font': self.REGULAR, 'scroll': True, 'text': '2 in 6 mins'},
-		{'font': self.REGULAR, 'scroll': True, 'text': '38R in 1 min'}
+		{'font': self.REGULAR, 'scroll': True, 'text': 'Vlad Ionescu'},
+		{'font': self.REGULAR, 'scroll': True, 'text': 'https://gitlab.com/vladionescu/bus-led-matrix'}
 	    ]
 	}
 
