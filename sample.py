@@ -4,7 +4,7 @@ sys.path.append('./lib')
 from matrixdriver import Display
 from libnextbus import Nextbus
 
-def _busses():
+def _busses(display):
     agency = 'sf-muni'
     route = '38'
     stop = '4294' # Divisadero x Geary
@@ -13,6 +13,9 @@ def _busses():
     predictions = bus_api.nextbus()
     print "Next " + route + " in "
     print predictions
+
+    display.set_row( display.MIDDLE_ROW, text='Next '+route )
+    display.set_row( display.BOTTOM_ROW, text=', '.join(predictions)+' mins', scroll=True )
 
 # Main function
 def main():
@@ -34,7 +37,7 @@ def main():
 	display_thread.start()
 
 	print("Starting NextBus API thread")
-	bus_thread = threading.Thread( target=_busses )
+	bus_thread = threading.Thread( target=_busses, args=(display,) )
 	bus_thread.start()
 	
 	# Loop forever, giving the display thread the opportunity to rejoin if it wants to
