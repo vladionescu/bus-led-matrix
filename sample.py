@@ -7,64 +7,76 @@ def usleep(value):
     time.sleep(value / 1000000.0)
 
 class Display():
-    def __init__(self, text, parsed_args, *args, **kwargs):
+    DONE_ROW = 'Done scrolling row'
+
+    def __init__(self, parsed_args, *args, **kwargs):
 	# Setup screen's variables
-	self.TOP_ROW	= 10
+	self.TOP_ROW    = 10
 	self.MIDDLE_ROW = 20
 	self.BOTTOM_ROW = 30
 
-        self.BOLD = graphics.Font()
-        self.BOLD.LoadFont("./fonts/7x13B.bdf")
-	
-        self.REGULAR = graphics.Font()
-        self.REGULAR.LoadFont("./fonts/7x13.bdf")
+	self.BOLD = graphics.Font()
+	self.BOLD.LoadFont("./fonts/7x13B.bdf")
 
-        self.color = graphics.Color(255, 0, 0)
+	self.REGULAR = graphics.Font()
+	self.REGULAR.LoadFont("./fonts/7x13.bdf")
+
+	self.color = graphics.Color(255, 0, 0)
 
 	# Load the args
-	self.text = text
+	self.matrix = RGBMatrix(parsed_args["rows"], parsed_args["chain"], parsed_args["parallel"])
+	self.matrix.pwmBits = parsed_args["pwmbits"]
+	self.matrix.brightness = parsed_args["brightness"]
 
-        self.matrix = RGBMatrix(parsed_args["rows"], parsed_args["chain"], parsed_args["parallel"])
-        self.matrix.pwmBits = parsed_args["pwmbits"]
-        self.matrix.brightness = parsed_args["brightness"]
-
-        if parsed_args["luminance"]:
-            self.matrix.luminanceCorrect = False
+	if parsed_args["luminance"]:
+	    self.matrix.luminanceCorrect = False
 
     def start(self):
         try:
             # Start loop
             print("Press CTRL-C to stop sample")
-	    current = 0 
-            for msg, code in self.Run():
-	      current += 1
-	      print msg
-	      print code
-	      print current
+            current = 0 
+            for msg, code in self.draw_screen():
+                current += 1
+                print msg
+                print code
+                print current
         except KeyboardInterrupt:
             print("Exiting\n")
             sys.exit(0)
 
         return True
 
-    def Run(self):
+    def draw_screen(self):
         print("Running")
-        offscreenCanvas = self.matrix.CreateFrameCanvas()
-        pos = offscreenCanvas.width
+
+        on_screen = { self.TOP_ROW : {'font': self.REGULAR, 'scroll': False, 'text': '17:25 PM'},
+		      self.MIDDLE_ROW : {'font': self.REGULAR, 'scroll': False, 'text':''},
+		      self.BOTTOM_ROW : {'font': self.BOLD, 'scroll': True, 'text': '38R in 1 min'} }
+
+        canvas = self.matrix.CreateFrameCanvas()
+        pos = { self.TOP_ROW : canvas.width,
+		self.MIDDLE_ROW : canvas.width,
+		self.BOTTOM_ROW : canvas.width }
+	line_len = { self.TOP_ROW: None, self.MIDDLE_ROW: None, self.BOTTOM_ROW: None }
 
         while True:
-	    offscreenCanvas.Clear()
-	    graphics.DrawText(offscreenCanvas, self.BOLD, 0, self.TOP_ROW, self.color, "15:35 PM")
-	    len = graphics.DrawText(offscreenCanvas, self.REGULAR, pos, self.BOTTOM_ROW, self.color, "2")
+            canvas.Clear()
 
-            pos -= 1
-            if (pos + len < 0):
-                pos = offscreenCanvas.width
-		yield "done", 3
+            for row in on_screen:
+	      if on_screen[row]['scroll']:
+		  line_len[row] = graphics.DrawText(canvas, on_screen[row]['font'], pos[row], row, self.color, on_screen[row]['text'])
+
+		  pos[row] -= 1
+		  if (pos[row] + line_len[row] < 0):
+		      pos[row] = canvas.width
+		      yield Display.DONE_ROW, row
+	      else:
+		  graphics.DrawText(canvas, on_screen[row]['font'], 0, row, self.color, on_screen[row]['text'])
+
 
             time.sleep(0.1)
-            offscreenCanvas = self.matrix.SwapOnVSync(offscreenCanvas)
-
+            canvas = self.matrix.SwapOnVSync(canvas)
 
 # Main function
 if __name__ == "__main__":
@@ -77,6 +89,5 @@ if __name__ == "__main__":
     parser.add_argument("-l", "--luminance", action="store_true", help="Don't do luminance correction (CIE1931)")
     parser.add_argument("-b", "--brightness", action="store", help="Sets brightness level. Default: 30. Range: 1..100", default=30, type=int)
 
-    display = Display("Hello World!!", vars(parser.parse_args())
-
+    display = Display( vars(parser.parse_args()) )
     display.start()
