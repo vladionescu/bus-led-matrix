@@ -50,33 +50,46 @@ class Display():
     def draw_screen(self):
         print("Running")
 
+	# Dummy dict of rows and their display parameters
         on_screen = { self.TOP_ROW : {'font': self.REGULAR, 'scroll': False, 'text': '17:25 PM'},
 		      self.MIDDLE_ROW : {'font': self.REGULAR, 'scroll': False, 'text':''},
 		      self.BOTTOM_ROW : {'font': self.BOLD, 'scroll': True, 'text': '38R in 1 min'} }
 
         canvas = self.matrix.CreateFrameCanvas()
+	
+	# The position of the message on each row, used when message is scrolling
         pos = { self.TOP_ROW : canvas.width,
 		self.MIDDLE_ROW : canvas.width,
 		self.BOTTOM_ROW : canvas.width }
+
 	line_len = { self.TOP_ROW: None, self.MIDDLE_ROW: None, self.BOTTOM_ROW: None }
 
+	# Display the on_screen dict of rows continuously
         while True:
+	    # Turn off all the pixels before lighting up new ones
+	    # Or else all will be on after a while
             canvas.Clear()
 
+	    # Render each row in turn
             for row in on_screen:
-	      if on_screen[row]['scroll']:
-		  line_len[row] = graphics.DrawText(canvas, on_screen[row]['font'], pos[row], row, self.color, on_screen[row]['text'])
+		# If this row is meant to scroll, make it scroll right to left
+		if on_screen[row]['scroll']:
+		    line_len[row] = graphics.DrawText(canvas, on_screen[row]['font'], pos[row], row, self.color, on_screen[row]['text'])
 
-		  pos[row] -= 1
-		  if (pos[row] + line_len[row] < 0):
-		      pos[row] = canvas.width
-		      yield Display.DONE_ROW, row
+		    pos[row] -= 1
+		    if (pos[row] + line_len[row] < 0):
+			# If the row has scrolled all the way, reset it
+			pos[row] = canvas.width
+			# Emit a "row done scrolling" message with corresponding row value
+			yield Display.DONE_ROW, row
 	      else:
+		  # Otherwise display it statically adjusted left
 		  graphics.DrawText(canvas, on_screen[row]['font'], 0, row, self.color, on_screen[row]['text'])
 
-
+	    # Wait a brief period before drawing the next screenful of rows
             time.sleep(0.1)
-            canvas = self.matrix.SwapOnVSync(canvas)
+	    # Draw the canvas we just made
+            canvas = self.matrix.SwapOnVSync(canvas) 
 
 # Main function
 if __name__ == "__main__":
