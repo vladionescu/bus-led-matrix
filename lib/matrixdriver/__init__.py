@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import argparse, time, sys, os
-sys.path.append('..') # this expects to be in <project_root>/lib/matrixdriver/
 from rgbmatrix import RGBMatrix, graphics
 
 def usleep(value):
