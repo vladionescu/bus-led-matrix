@@ -14,8 +14,8 @@ def _busses(display):
     print "Next " + route + " in "
     print predictions
 
-    display.set_row( display.MIDDLE_ROW, text='Next '+route )
-    display.set_row( display.BOTTOM_ROW, text=', '.join(predictions)+' mins', scroll=True )
+    display.set_row( display.MIDDLE_ROW, text='Next '+route, instant=True )
+    display.set_row( display.BOTTOM_ROW, text=', '.join(predictions)+' mins', scroll=True, instant=True )
 
 # Main function
 def main():

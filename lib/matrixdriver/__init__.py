@@ -158,7 +158,8 @@ class Display():
     # Note that giving a msg_index will only change that index and will not remove all messages for the row
     # To set the row to a single message, pass a row and text, and optionally font and scroll
     # To set the row to mutliple messages, pass the above and the msg_indexes you want to set, no index gaps!
-    def set_row(self, row=None, text='', font=None, scroll=False, msg_index=None):
+    # Setting instant will cause the update to be immediate, ignoring scrolling text
+    def set_row(self, row=None, text='', font=None, scroll=False, msg_index=None, instant=True):
 	print("Setting row")
 	if row is None:
 	    raise ValueError('Need to know what row to set')
@@ -182,7 +183,7 @@ class Display():
 
 	# If the currently displayed message is being changed and it is static
 	# We have to change it immediately because there will be no 'scroll finished' event to trigger an update
-	if index == self.on_screen[row]['current_index'] and not self.on_screen[row]['scroll']:
+	if ( index == self.on_screen[row]['current_index'] and not self.on_screen[row]['scroll'] ) or instant:
 	    self.on_screen[row] = message
 	    self.on_screen[row]['current_index'] = index
 
