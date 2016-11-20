@@ -31,16 +31,78 @@ class Display():
 	if parsed_args["luminance"]:
 	    self.matrix.luminanceCorrect = False
 
+	# Instance objects
+        self.on_screen = { self.TOP_ROW : {}, self.MIDDLE_ROW : {}, self.BOTTOM_ROW : {} }
+	self.to_be_displayed = {
+	    self.TOP_ROW : [ 
+		{'font': self.BOLD, 'scroll': False, 'text': '17:25 PM'}
+	    ],
+	    self.MIDDLE_ROW : [
+		{'font': self.REGULAR, 'scroll': False, 'text': ''}
+	    ],
+	    self.BOTTOM_ROW : [
+		{'font': self.REGULAR, 'scroll': True, 'text': '2 in 6 mins'},
+		{'font': self.REGULAR, 'scroll': True, 'text': '38R in 1 min'}
+	    ]
+	}
+
+    # Update on_screen for the specified row
+    # Using the message from specified row & msg_index in to_be_displayed
+    def prepare_row(self, row, msg_index):
+	if row not in [self.TOP_ROW, self.MIDDLE_ROW, self.BOTTOM_ROW]:
+	    raise ValueError('Invalid row')
+	    return False
+
+	if msg_index >= len(self.to_be_displayed[row]):
+	    raise ValueError('Message index does not exist in that row')
+	    return False
+
+	font = self.to_be_displayed[row][msg_index]['font']
+	if font is None or font not in [self.REGULAR, self.BOLD]:
+	    font = self.REGULAR
+
+	scroll = self.to_be_displayed[row][msg_index]['scroll']
+	if not isinstance(scroll, bool):
+	    scroll = False
+
+	self.on_screen[row]['font'] = font
+	self.on_screen[row]['scroll'] = scroll
+	self.on_screen[row]['text'] = self.to_be_displayed[row][msg_index]['text']
+	self.on_screen[row]['current_index'] = msg_index
+
     def start(self):
         try:
             # Start loop
             print("Press CTRL-C to stop sample")
-            current = 0 
-            for msg, code in self.draw_screen():
-                current += 1
-                print msg
-                print code
-                print current
+
+	    # Initialize by starting the first message in each row
+	    msg_index = { self.TOP_ROW: 0,
+		self.MIDDLE_ROW: 0,
+		self.BOTTOM_ROW: 0 }
+	    
+	    # Preseed the screen with the first messages
+	    # So the first time the screen is drawn there is something there
+	    for row, index in msg_index.iteritems():
+		self.prepare_row(row, index)
+
+	    # Draw the screen and react to events it emits
+	    for event, code in self.draw_screen():
+		# When a row is done scrolling (the message has gone off screen)
+		# Display the next message for that row
+		# This will show the same message again if there is only 1 message available
+		if event == Display.DONE_ROW:
+		    row = code
+
+		    # Iterate through the list of messages available for this row
+		    if msg_index[row] < len(self.to_be_displayed[row]) - 1:
+			# If this is not the last message for this row, look to the next one
+			msg_index[row] += 1
+		    else:
+			# If this is the last message for this row, loop to the beginning
+			msg_index[row] = 0
+
+		    # Set what the next rendering of the screen will show
+		    self.prepare_row(row, msg_index[row])
         except KeyboardInterrupt:
             print("Exiting\n")
             sys.exit(0)
@@ -49,11 +111,6 @@ class Display():
 
     def draw_screen(self):
         print("Running")
-
-	# Dummy dict of rows and their display parameters
-        on_screen = { self.TOP_ROW : {'font': self.REGULAR, 'scroll': False, 'text': '17:25 PM'},
-		      self.MIDDLE_ROW : {'font': self.REGULAR, 'scroll': False, 'text':''},
-		      self.BOTTOM_ROW : {'font': self.BOLD, 'scroll': True, 'text': '38R in 1 min'} }
 
         canvas = self.matrix.CreateFrameCanvas()
 	
@@ -71,25 +128,63 @@ class Display():
             canvas.Clear()
 
 	    # Render each row in turn
-            for row in on_screen:
+            for row, message in self.on_screen.iteritems():
 		# If this row is meant to scroll, make it scroll right to left
-		if on_screen[row]['scroll']:
-		    line_len[row] = graphics.DrawText(canvas, on_screen[row]['font'], pos[row], row, self.color, on_screen[row]['text'])
+		if message['scroll']:
+		    line_len[row] = graphics.DrawText(canvas, message['font'], pos[row], row, self.color, message['text'])
 
 		    pos[row] -= 1
 		    if (pos[row] + line_len[row] < 0):
 			# If the row has scrolled all the way, reset it
 			pos[row] = canvas.width
-			# Emit a "row done scrolling" message with corresponding row value
+
+			# Emit a "row done scrolling" event
 			yield Display.DONE_ROW, row
-	      else:
-		  # Otherwise display it statically adjusted left
-		  graphics.DrawText(canvas, on_screen[row]['font'], 0, row, self.color, on_screen[row]['text'])
+		else:
+		    # Otherwise display it statically adjusted left
+		    graphics.DrawText(canvas, message['font'], 0, row, self.color, message['text'])
 
 	    # Wait a brief period before drawing the next screenful of rows
             time.sleep(0.1)
 	    # Draw the canvas we just made
             canvas = self.matrix.SwapOnVSync(canvas) 
+
+    # Requires a row.
+    # Given only a row it will blank that row, removing all messages for the row
+    # By default the font is REGULAR and there is no scrolling
+    # Note that giving a msg_index will only change that index and will not remove all messages for the row
+    # To set the row to a single message, pass a row and text, and optionally font and scroll
+    # To set the row to mutliple messages, pass the above and the msg_indexes you want to set, no index gaps!
+    def set_row(self, row=None, text='', font=None, scroll=False, msg_index=None):
+	if row is None:
+	    raise ValueError('Need to know what row to set')
+	    return False
+
+	if row not in [self.TOP_ROW, self.MIDDLE_ROW, self.BOTTOM_ROW]:
+	    raise ValueError('Invalid row')
+	    return False
+
+	if font is None or font not in [self.REGULAR, self.BOLD]:
+	    font = self.REGULAR
+	
+	# If no msg_index was specified, clear the messages for this row then set the new one
+	if msg_index is None:
+	    index = 0
+	    self.to_be_displayed[row] = []
+	else:
+	    index = msg_index
+
+	message = {'font': font, 'scroll': scroll, 'text': text}
+
+	# If the currently displayed message is being changed and it is static
+	# We have to change it immediately because there will be no 'scroll finished' event to trigger an update
+	if index == self.on_screen[row]['current_index'] and not self.on_screen[row][index]['scroll']:
+	    self.on_screen[row] = message
+	    self.on_screen[row]['current_index'] = index
+
+	self.to_be_displayed[row].insert(index, message)
+
+	return True
 
 # Main function
 if __name__ == "__main__":
