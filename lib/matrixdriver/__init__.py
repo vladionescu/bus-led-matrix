@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import argparse, time, sys, os
+import argparse, time, sys, os, threading
 from rgbmatrix import RGBMatrix, graphics
 
 def usleep(value):
@@ -46,6 +46,11 @@ class Display():
 		{'font': self.REGULAR, 'scroll': True, 'text': 'https://gitlab.com/vladionescu/bus-led-matrix'}
 	    ]
 	}
+	self._stop = threading.Event()
+
+    # Ask the thread to die. Thread checks this every 0.1 seconds.
+    def stop(self):
+	self._stop.set()
 
     # Update on_screen for the specified row
     # Using the message from specified row & msg_index in to_be_displayed
@@ -72,43 +77,36 @@ class Display():
 	self.on_screen[row]['current_index'] = msg_index
 
     def start(self):
-        try:
-            # Start loop
-            print("Press CTRL-C to stop sample")
+	# Start loop
 
-	    # Initialize by starting the first message in each row
-	    msg_index = { self.TOP_ROW: 0,
-		self.MIDDLE_ROW: 0,
-		self.BOTTOM_ROW: 0 }
-	    
-	    # Preseed the screen with the first messages
-	    # So the first time the screen is drawn there is something there
-	    for row, index in msg_index.iteritems():
-		self._prepare_row(row, index)
+	# Initialize by starting the first message in each row
+	msg_index = { self.TOP_ROW: 0,
+	    self.MIDDLE_ROW: 0,
+	    self.BOTTOM_ROW: 0 }
+	
+	# Preseed the screen with the first messages
+	# So the first time the screen is drawn there is something there
+	for row, index in msg_index.iteritems():
+	    self._prepare_row(row, index)
 
-	    # Draw the screen and react to events it emits
-	    for event, code in self._draw_screen():
-		# When a row is done scrolling (the message has gone off screen)
-		# Display the next message for that row
-		# This will show the same message again if there is only 1 message available
-		if event == Display.DONE_ROW:
-		    row = code
+	# Draw the screen and react to events it emits
+	for event, code in self._draw_screen():
+	    # When a row is done scrolling (the message has gone off screen)
+	    # Display the next message for that row
+	    # This will show the same message again if there is only 1 message available
+	    if event == Display.DONE_ROW:
+		row = code
 
-		    # Iterate through the list of messages available for this row
-		    if msg_index[row] < len(self.to_be_displayed[row]) - 1:
-			# If this is not the last message for this row, look to the next one
-			msg_index[row] += 1
-		    else:
-			# If this is the last message for this row, loop to the beginning
-			msg_index[row] = 0
+		# Iterate through the list of messages available for this row
+		if msg_index[row] < len(self.to_be_displayed[row]) - 1:
+		    # If this is not the last message for this row, look to the next one
+		    msg_index[row] += 1
+		else:
+		    # If this is the last message for this row, loop to the beginning
+		    msg_index[row] = 0
 
-		    # Set what the next rendering of the screen will show
-		    self._prepare_row(row, msg_index[row])
-        except KeyboardInterrupt:
-            print("Exiting\n")
-            sys.exit(0)
-
-        return True
+		# Set what the next rendering of the screen will show
+		self._prepare_row(row, msg_index[row])
 
     def _draw_screen(self):
         print("Running")
@@ -124,6 +122,10 @@ class Display():
 
 	# Display the on_screen dict of rows continuously
         while True:
+	    # Check if we need to exit
+	    if self._stop.isSet():
+		break
+
 	    # Turn off all the pixels before lighting up new ones
 	    # Or else all will be on after a while
             canvas.Clear()
@@ -157,6 +159,7 @@ class Display():
     # To set the row to a single message, pass a row and text, and optionally font and scroll
     # To set the row to mutliple messages, pass the above and the msg_indexes you want to set, no index gaps!
     def set_row(self, row=None, text='', font=None, scroll=False, msg_index=None):
+	print("Setting row")
 	if row is None:
 	    raise ValueError('Need to know what row to set')
 	    return False
@@ -179,7 +182,7 @@ class Display():
 
 	# If the currently displayed message is being changed and it is static
 	# We have to change it immediately because there will be no 'scroll finished' event to trigger an update
-	if index == self.on_screen[row]['current_index'] and not self.on_screen[row][index]['scroll']:
+	if index == self.on_screen[row]['current_index'] and not self.on_screen[row]['scroll']:
 	    self.on_screen[row] = message
 	    self.on_screen[row]['current_index'] = index
 
