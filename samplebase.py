@@ -38,7 +38,12 @@ class SampleBase(argparse.ArgumentParser):
         try:
             # Start loop
             print("Press CTRL-C to stop sample")
-            self.Run()
+	    current = 0 
+            for msg, code in self.Run():
+	      current += 1
+	      print msg
+	      print code
+	      print current
         except KeyboardInterrupt:
             print("Exiting\n")
             sys.exit(0)
