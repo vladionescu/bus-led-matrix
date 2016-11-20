@@ -48,7 +48,7 @@ class Display():
 
     # Update on_screen for the specified row
     # Using the message from specified row & msg_index in to_be_displayed
-    def prepare_row(self, row, msg_index):
+    def _prepare_row(self, row, msg_index):
 	if row not in [self.TOP_ROW, self.MIDDLE_ROW, self.BOTTOM_ROW]:
 	    raise ValueError('Invalid row')
 	    return False
@@ -83,10 +83,10 @@ class Display():
 	    # Preseed the screen with the first messages
 	    # So the first time the screen is drawn there is something there
 	    for row, index in msg_index.iteritems():
-		self.prepare_row(row, index)
+		self._prepare_row(row, index)
 
 	    # Draw the screen and react to events it emits
-	    for event, code in self.draw_screen():
+	    for event, code in self._draw_screen():
 		# When a row is done scrolling (the message has gone off screen)
 		# Display the next message for that row
 		# This will show the same message again if there is only 1 message available
@@ -102,14 +102,14 @@ class Display():
 			msg_index[row] = 0
 
 		    # Set what the next rendering of the screen will show
-		    self.prepare_row(row, msg_index[row])
+		    self._prepare_row(row, msg_index[row])
         except KeyboardInterrupt:
             print("Exiting\n")
             sys.exit(0)
 
         return True
 
-    def draw_screen(self):
+    def _draw_screen(self):
         print("Running")
 
         canvas = self.matrix.CreateFrameCanvas()
