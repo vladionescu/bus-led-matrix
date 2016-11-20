@@ -1,2 +1,2 @@
--e git+https://gitlab.com/vladionescu/nextbus-python#egg=nextbus
+-e git+https://gitlab.com/vladionescu/nextbus-python#egg=libnextbus
 requests>=2.7.0

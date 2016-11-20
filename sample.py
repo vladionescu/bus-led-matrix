@@ -2,7 +2,7 @@
 import argparse, time, sys, os, threading
 sys.path.append('./lib')
 from matrixdriver import Display
-import Nextbus
+from libnextbus import Nextbus
 
 def _busses():
     agency = 'sf-muni'
@@ -11,7 +11,8 @@ def _busses():
 
     bus_api = Nextbus(agency=agency, route=route, stop=stop)
     predictions = bus_api.nextbus()
-    print "Next " + route + " in " + predictions + " minutes"
+    print "Next " + route + " in "
+    print predictions
 
 # Main function
 def main():
