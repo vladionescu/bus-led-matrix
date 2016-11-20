@@ -2,6 +2,17 @@
 import argparse, time, sys, os, threading
 sys.path.append('./lib')
 from matrixdriver import Display
+from libnextbus import Nextbus
+
+def _busses():
+    agency = 'sf-muni'
+    route = '38'
+    stop = '4294' # Divisadero x Geary
+
+    bus_api = Nextbus(agency=agency, route=route, stop=stop)
+    predictions = bus_api.nextbus()
+    print "Next " + route + " in "
+    print predictions
 
 # Main function
 def main():
@@ -17,14 +28,17 @@ def main():
 	parser.add_argument("-l", "--luminance", action="store_true", help="Don't do luminance correction (CIE1931)")
 	parser.add_argument("-b", "--brightness", action="store", help="Sets brightness level. Default: 30. Range: 1..100", default=30, type=int)
 
+	print("Starting display thread")
 	display = Display( vars(parser.parse_args()) )
 	display_thread = threading.Thread( target=display.start )
 	display_thread.start()
 
-	print("Starting display thread")
-	time.sleep(2)
-	display.set_row(row=display.MIDDLE_ROW, text="test")
-
+	print("Starting NextBus API thread")
+	bus_thread = threading.Thread( target=_busses )
+	bus_thread.start()
+	
+	# Loop forever, giving the display thread the opportunity to rejoin if it wants to
+	# (forever until ^C, that is)
 	while True:
 	    display_thread.join(3)
     except KeyboardInterrupt:
