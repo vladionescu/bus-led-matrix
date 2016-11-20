@@ -1,0 +1,77 @@
+- display gets called to show clock, or bus times, or messages
+- fetch bus times from API, store somewhere locally
+- update display based on bus times, messages, clock, whatever
+- but times should be fetched in the background
+
+
+- initialize display with arguments (rows x chain, parallel?)
+
+- maintain message/state of all 3 rows
+on_screen = { TOP: ['time', 'news'], MID: [''],
+          BOT: ['2 in 3 mins', '38 in 16 mins', '38R in 1 min'] }
+# - OR -
+on_screen = { 'TOP': {'font':REGULAR, 'scroll':False, 'text':'time'}, 'MID': {..., 'text':''},
+          'BOT': {'font':BOLD, 'scroll':True, 'text':'38R in 1 min'} }
+
+def draw_screen():
+    canvas = matrix.canvas()
+    pos = {'TOP':canvas.width, 'MID':canvas.width, 'BOT':canvas.width}
+    while True:
+    canvas.clear()
+    for row in on_screen:
+        if on_screen[row].scroll:
+        len[row] = graphics.DrawText(display, canvas, on_screen[row].font, pos[row], row, color, on_screen[row].text)
+        else:
+        graphics.DrawText(display, canvas, on_screen[row].font, 0, row, color, on_screen[row].text)
+
+        pos[row] += 1
+        if (pos[row] + len[row] < 0):
+        pos[row] = canvas.width
+        yield DONE_ROW, row
+
+    time.sleep(0.1)
+    canvas = canvas.sync()
+
+- when a row is changed, if the message is static change it immediately
+def update(row, messages): # messages = [ {text: '', scroll=False, font=REGULAR}, {...} ]
+    to_be_displayed[row] = messages
+
+    if not to_be_displayed[row].scroll:
+    on_screen[row] = message
+
+- otherwise if the message scrolls wait for it to finish then put the next message on
+def display():
+    msg_index = {TOP:0, MID:0, BOT:0}
+    for event, code in draw_screen():
+    if event == DONE_ROW:
+        row = code # where code == TOP, MID, BOT
+        if msg_index[row] < len(to_be_displayed[row] - 1):
+        msg_index[row] += 1
+        else:
+        msg_index[row] = 0
+        on_screen[row].text = to_be_displayed[row][msg_index[row]].text
+        on_screen[row].scroll = to_be_displayed[row][msg_index[row]].scroll
+        on_screen[row].font = to_be_displayed[row][msg_index[row]].font
+
+- emit event on 'finished scroll' and 'finished multiple messages'
+(in called function)
+>>> while True:
+...    do_some_stuff()
+...    yield 'event happened'
+(in calling function)
+>>> for event in func():
+...    print event
+event happened
+event happened
+event happened
+^C
+
+- top/mid/bottom rows configurable (scroll/static, bold/regular, text)
+dict of dicts?
+to_be_displayed = { top: {scroll: False, font: self.BOLD, text: '1:45 PM'},
+            mid: {scroll: False, font: self.REGULAR, text: ''},
+            bot: {scroll: True, font: self.REGULAR, text: 'Next 2 in 13 minutes'} }
+to_be_displayed.top.text = '1:45 PM'
+
+- way to queue up multiple messages, scrolling or static, per each row
+dict of array of dicts? { top: [{...}], mid: [{...}, {...}], bot: [{...}, {...}, {...}] }
