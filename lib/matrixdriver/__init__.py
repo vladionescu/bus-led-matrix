@@ -124,6 +124,8 @@ class Display():
         while True:
 	    # Check if we need to exit
 	    if self._stop.isSet():
+		canvas.Clear()
+		self.matrix.SwapOnVSync(canvas) 
 		break
 
 	    # Turn off all the pixels before lighting up new ones
