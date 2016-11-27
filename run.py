@@ -84,6 +84,7 @@ def main():
 
 	print("Starting MQTT thread, listening for commands")
 	command_thread = threading.Thread( target=_mqtt_sub )
+	command_thread.daemon = True
 	display_on.set()
 	get_commands.set()
 	command_thread.start()
@@ -98,10 +99,12 @@ def main():
 		print("Starting display thread")
 		display = Display( args )
 		display_thread = threading.Thread( target=display.start )
+		display_thread.daemon = True
 		display_thread.start()
 
 		print("Starting NextBus API thread")
 		bus_thread = threading.Thread( target=_busses, args=(display, args['refresh']) )
+		bus_thread.daemon = True
 		get_busses.set()
 		bus_thread.start()
 
@@ -117,13 +120,13 @@ def main():
     except KeyboardInterrupt:
 	print "\nExiting\n"
 	display.stop()
-	display_thread.join()
+	#display_thread.join()
 
-	get_busses.clear()
-	bus_thread.join()
+	#get_busses.clear()
+	#bus_thread.join()
 
-	get_commands.clear()
-	command_thread.join()
+	#get_commands.clear()
+	#command_thread.join()
 
 	sys.exit(0)
 
