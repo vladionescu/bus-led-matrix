@@ -109,7 +109,7 @@ def main():
 		bus_thread.start()
 
 		# Keep the display on for a few seconds then turn off
-		time.sleep(5)
+		time.sleep(15)
 		display_on.clear()
 	    if not display_on.isSet():
 		display.stop()
