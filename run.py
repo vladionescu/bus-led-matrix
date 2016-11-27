@@ -6,7 +6,7 @@ from matrixdriver import Display
 from libnextbus import Nextbus
 
 get_commands = threading.Event()
-get_busses = threading.Event()
+stop_busses = threading.Event()
 display_on = threading.Event()
 
 # Command thread, loops listening to the MQTT topic it's subscribed to
@@ -38,32 +38,33 @@ def _mqtt_sub():
 
     while get_commands.isSet():
       # Blocking call that processes network traffic, dispatches callbacks and
-      # handles reconnecting.
-      client.loop()
+      # handles reconnecting. Loops every 0.25 seconds.
+      client.loop(0.25)
+    else:
+      # Disconnect cleanly
+      client.disconnect()
 
 # Gets bus times from NextBus and updates the display every refresh_rate seconds
 # Middle row: Next <bus number>
 # Bottom row: x, y, z mins
 def _busses(display, refresh_rate):
     while True:
-	while get_busses.isSet():
-	    agency = 'sf-muni'
-	    route = '38'
-	    stop = '4294' # Divisadero x Geary
+	agency = 'sf-muni'
+	route = '38'
+	stop = '4294' # Divisadero x Geary
 
-	    bus_api = Nextbus(agency=agency, route=route, stop=stop)
-	    predictions = bus_api.nextbus()
-	    print "Next " + route + " in "
-	    print predictions
+	bus_api = Nextbus(agency=agency, route=route, stop=stop)
+	predictions = bus_api.nextbus()
+	print "Next " + route + " in "
+	print predictions
 
-	    display.set_row( display.MIDDLE_ROW, text='Next '+route, instant=True )
-	    display.set_row( display.BOTTOM_ROW, text=', '.join(predictions)+' mins', scroll=True, instant=True )
+	display.set_row( display.MIDDLE_ROW, text='Next '+route, instant=True )
+	display.set_row( display.BOTTOM_ROW, text=', '.join(predictions)+' mins', scroll=True, instant=True )
 
-	    for i in xrange(refresh_rate):
-		if not get_busses.isSet():
-		    return
-
-		time.sleep(1)
+	# After the busses have been retrieved, wait refresh_rate seconds
+	# If we aren't told to stop in refresh_rate, get busses again
+	if stop_busses.wait(refresh_rate):
+	    return
 
 # Main function
 def main():
@@ -105,7 +106,6 @@ def main():
 		print("Starting NextBus API thread")
 		bus_thread = threading.Thread( target=_busses, args=(display, args['refresh']) )
 		bus_thread.daemon = True
-		get_busses.set()
 		bus_thread.start()
 
 		# Keep the display on for a few seconds then turn off
@@ -115,18 +115,25 @@ def main():
 		display.stop()
 		display_thread.join()
 
-		get_busses.clear()
+		stop_busses.set()
 		bus_thread.join()
     except KeyboardInterrupt:
 	print "\nExiting\n"
+
+	stop_busses.set()
+	# We could wait for the bus thread to stop any remaining IO
+	# And check the stop_busses Event, exiting (and joining up)
+	# But waiting for the command and display threads to stop will
+	#   take some time anyway, so we'll rely on that instead.
+	#bus_thread.join()
+
 	display.stop()
 	#display_thread.join()
 
-	#get_busses.clear()
-	#bus_thread.join()
-
-	#get_commands.clear()
-	#command_thread.join()
+	# Stop the command thread
+	get_commands.clear()
+	# And wait for MQTT to disconnect from broker
+	command_thread.join()
 
 	sys.exit(0)
 
