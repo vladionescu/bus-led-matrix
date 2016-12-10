@@ -9,3 +9,16 @@ I wrote an LED Matrix driver shim for this project, it's in **lib/matrixdriver/*
 ```
 $ sudo ./run.py
 ```
+
+Script currently expects a hard coded MQTT broker and the #commands topic.
+
+## TODO
+
+* Add an independent config file.
+  * For MQTT parameters
+  * And NextBus parameters
+* Implement proper logging.
+* Display should turn off after 60 seconds of on time.
+* Multiple 'display on' commands should extend the display on time by 60 seconds.
+* MQTT should be optional.
+* Add 433 MHz remote as additional on/off trigger.
