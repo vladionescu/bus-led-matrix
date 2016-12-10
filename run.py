@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse, time, sys, os, threading
+import Queue
 import paho.mqtt.client as mqtt
 sys.path.append('./lib')
 from matrixdriver import Display
@@ -7,13 +8,17 @@ from libnextbus import Nextbus
 
 get_commands = threading.Event()
 stop_busses = threading.Event()
-display_on = threading.Event()
+
+# Command slots, max 5 can be queued until the server refuses to queue more
+commands_q = Queue.Queue(5)
+
+valid_commands = ['display on', 'display off']
 
 # Command thread, loops listening to the MQTT topic it's subscribed to
 def _mqtt_sub():
     BROKER = "192.168.1.201"
-    CLIENT_ID = "dobby-slave"
-    TOPIC = "nextbus-on"
+    CLIENT_ID = "dobby-display"
+    TOPIC = "commands"
 
     # The callback for when the client receives a CONNACK response from the server.
     def on_connect(client, userdata, flags, rc):
@@ -27,8 +32,20 @@ def _mqtt_sub():
     def on_message(client, userdata, msg):
 	print("MQTT rx: "+msg.topic+" ( "+str(msg.payload)+" )")
 
-	if msg.payload == "TRUE":
-	    display_on.set()
+	message = msg.payload.lower()
+
+	if message in valid_commands:
+	    print ("+Q: "+message)
+
+	    # Queue the command, but only if there is a free command slot
+	    try:
+		commands_q.put(message, False)
+
+		# The display.off() must be called twice, so queue it twice
+		#if message == 'display off':
+		#    commands_q.put(message, False)
+	    except Queue.Full:
+		pass
 
     client = mqtt.Client(client_id=CLIENT_ID)
     client.on_connect = on_connect
@@ -37,34 +54,39 @@ def _mqtt_sub():
     client.connect(BROKER, 1883, 60)
 
     while get_commands.isSet():
-      # Blocking call that processes network traffic, dispatches callbacks and
-      # handles reconnecting. Loops every 0.25 seconds.
-      client.loop(0.25)
+	# Blocking call that processes network traffic, dispatches callbacks and
+	# handles reconnecting. Loops every 0.25 seconds.
+	client.loop(0.25)
     else:
-      # Disconnect cleanly
-      client.disconnect()
+	# Disconnect cleanly
+	client.disconnect()
 
 # Gets bus times from NextBus and updates the display every refresh_rate seconds
 # Middle row: Next <bus number>
 # Bottom row: x, y, z mins
 def _busses(display, refresh_rate):
-    while True:
-	agency = 'sf-muni'
-	route = '38'
-	stop = '4294' # Divisadero x Geary
+    try:
+	while True:
+	    agency = 'sf-muni'
+	    route = '38'
+	    stop = '4294' # Divisadero x Geary
 
-	bus_api = Nextbus(agency=agency, route=route, stop=stop)
-	predictions = bus_api.nextbus()
-	print "Next " + route + " in "
-	print predictions
+	    bus_api = Nextbus(agency=agency, route=route, stop=stop)
+	    predictions = bus_api.nextbus()
+	    print "Next " + route + " in "
+	    print predictions
 
-	display.set_row( display.MIDDLE_ROW, text='Next '+route, instant=True )
-	display.set_row( display.BOTTOM_ROW, text=', '.join(predictions)+' mins', scroll=True, instant=True )
+	    display.set_row( display.MIDDLE_ROW, text='Next '+route, instant=True )
+	    display.set_row( display.BOTTOM_ROW, text=', '.join(predictions)+' mins', scroll=True, instant=True )
 
-	# After the busses have been retrieved, wait refresh_rate seconds
-	# If we aren't told to stop in refresh_rate, get busses again
-	if stop_busses.wait(refresh_rate):
-	    return
+	    # After the busses have been retrieved, wait refresh_rate seconds
+	    # If we aren't told to stop in refresh_rate, get busses again
+	    if stop_busses.wait(refresh_rate):
+#		display.set_row( display.MIDDLE_ROW, text='ENOBUS', instant=True )
+#		display.set_row( display.BOTTOM_ROW, text='ENOBUS', scroll=False, instant=True )
+		return
+    except KeyboardInterrupt:
+	return
 
 # Main function
 def main():
@@ -83,40 +105,45 @@ def main():
 
 	args = vars(parser.parse_args())
 
+	get_commands.set()
+
 	print("Starting MQTT thread, listening for commands")
 	command_thread = threading.Thread( target=_mqtt_sub )
 	command_thread.daemon = True
-	display_on.set()
-	get_commands.set()
 	command_thread.start()
+
+	print("Starting display thread")
+	display = Display( args )
+	display.daemon = True
+	display.start()
+	display.on()
 
 	# Loop forever (until ^C)
 	while True:
-	    if display_on.isSet():
+	    # Check if a command is available in the queue
+	    try:
+		command = commands_q.get(False)
+	    except Queue.Empty:
+		continue
+
+	    if command == 'display on':
 		# TODO move the display thread out of while True.
 		# display stuff should be setup with command thread.
 		# TODO rearchitect Display() to have on() and off() funcs
 		# call those here instead of spawning/killing threads
-		print("Starting display thread")
-		display = Display( args )
-		display_thread = threading.Thread( target=display.start )
-		display_thread.daemon = True
-		display_thread.start()
+		print("Turning display on")
+		display.on()
 
 		print("Starting NextBus API thread")
+		stop_busses.clear()
 		bus_thread = threading.Thread( target=_busses, args=(display, args['refresh']) )
 		bus_thread.daemon = True
 		bus_thread.start()
-
-		# Keep the display on for a few seconds then turn off
-		time.sleep(15)
-		display_on.clear()
-	    if not display_on.isSet():
-		display.stop()
-		display_thread.join()
+	    if command == 'display off':
+		print("Turning display off")
+		display.off()
 
 		stop_busses.set()
-		bus_thread.join()
     except KeyboardInterrupt:
 	print "\nExiting\n"
 
@@ -127,8 +154,7 @@ def main():
 	#   take some time anyway, so we'll rely on that instead.
 	#bus_thread.join()
 
-	display.stop()
-	#display_thread.join()
+	display.join(5)
 
 	# Stop the command thread
 	get_commands.clear()

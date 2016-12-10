@@ -2,15 +2,14 @@
 import argparse, time, sys, os, threading
 from rgbmatrix import RGBMatrix, graphics
 
-def usleep(value):
-    time.sleep(value / 1000000.0)
-
-class Display():
+class Display(threading.Thread):
     DONE_ROW = 'Done scrolling row'
 
     # Expects parsed_args to contain:
     #	rows (int), chain (int), parallel (int), pwmbits (int), luminance (bool), brightness (int)
     def __init__(self, parsed_args, *args, **kwargs):
+	super(Display, self).__init__()
+
 	# Setup screen's variables
 	self.TOP_ROW    = 10
 	self.MIDDLE_ROW = 20
@@ -47,10 +46,67 @@ class Display():
 	    ]
 	}
 	self._stop = threading.Event()
+	self._isOff = threading.Event()
+	self._isClear = threading.Event()
+	self._on = threading.Event()
+	self._reset = threading.Event()
 
-    # Ask the thread to die. Thread checks this every 0.1 seconds.
-    def stop(self):
+    # Ask the thread to die. Display._draw_screen() checks this every 0.1 seconds.
+    def join(self, timeout=None):
 	self._stop.set()
+	super(Display, self).join(timeout)
+
+    # Clear the display, turning it off
+    def off(self):
+	self._on.clear()
+	self._isOff.set()
+
+    # Set the _on flag, which will cause _draw_screen() to start drawing
+    # If the display was previously off(), reset() text positioning
+    def on(self):
+	if self._isOff.isSet():
+	    self._reset.set()
+
+	self._on.set()
+	self._isOff.clear()
+
+    def run(self):
+	try:
+	    # Initialize by starting the first message in each row
+	    msg_index = { self.TOP_ROW: 0,
+		self.MIDDLE_ROW: 0,
+		self.BOTTOM_ROW: 0 }
+	    
+	    # Preseed the screen with the first messages
+	    # So the first time the screen is drawn there is something there
+	    for row, index in msg_index.iteritems():
+		self._prepare_row(row, index)
+
+	    # Update time every second
+	    self._watch_the_time()
+
+	    # Draw the screen and react to events it emits
+	    # Because _draw_screen() is an infinite emitter, this should
+	    #   never exit.
+	    for event, code in self._draw_screen():
+		# When a row is done scrolling (the message has gone off screen)
+		# Display the next message for that row
+		# This will show the same message again if there is only 1 message available
+		if event == Display.DONE_ROW:
+		    row = code
+
+		    # Iterate through the list of messages available for this row
+		    if msg_index[row] < len(self.to_be_displayed[row]) - 1:
+			# If this is not the last message for this row, look to the next one
+			msg_index[row] += 1
+		    else:
+			# If this is the last message for this row, loop to the beginning
+			msg_index[row] = 0
+
+		    # Set what the next rendering of the screen will show
+		    self._prepare_row(row, msg_index[row])
+	except KeyboardInterrupt:
+	    return
 
     # Update on_screen for the specified row
     # Using the message from specified row & msg_index in to_be_displayed
@@ -76,40 +132,8 @@ class Display():
 	self.on_screen[row]['text'] = self.to_be_displayed[row][msg_index]['text']
 	self.on_screen[row]['current_index'] = msg_index
 
-    def start(self):
-	# Start loop
-
-	# Initialize by starting the first message in each row
-	msg_index = { self.TOP_ROW: 0,
-	    self.MIDDLE_ROW: 0,
-	    self.BOTTOM_ROW: 0 }
-	
-	# Preseed the screen with the first messages
-	# So the first time the screen is drawn there is something there
-	for row, index in msg_index.iteritems():
-	    self._prepare_row(row, index)
-
-	# Draw the screen and react to events it emits
-	for event, code in self._draw_screen():
-	    # When a row is done scrolling (the message has gone off screen)
-	    # Display the next message for that row
-	    # This will show the same message again if there is only 1 message available
-	    if event == Display.DONE_ROW:
-		row = code
-
-		# Iterate through the list of messages available for this row
-		if msg_index[row] < len(self.to_be_displayed[row]) - 1:
-		    # If this is not the last message for this row, look to the next one
-		    msg_index[row] += 1
-		else:
-		    # If this is the last message for this row, loop to the beginning
-		    msg_index[row] = 0
-
-		# Set what the next rendering of the screen will show
-		self._prepare_row(row, msg_index[row])
-
     def _draw_screen(self):
-        print("Running")
+        print("Display is running")
 
         canvas = self.matrix.CreateFrameCanvas()
 	
@@ -124,9 +148,31 @@ class Display():
         while True:
 	    # Check if we need to exit
 	    if self._stop.isSet():
-		canvas.Clear()
-		self.matrix.SwapOnVSync(canvas) 
+		self.off()
 		break
+	    
+	    # Check if the display is supposed to be off
+	    # If so, clear it once then loop at a slower interval
+	    if not self._on.isSet():
+		if not self._isClear.isSet():
+		    canvas.Clear()
+		    canvas = self.matrix.SwapOnVSync(canvas) 
+		    self._isClear.set()
+
+		time.sleep(0.1)
+		continue
+	    
+	    # Each time the display is turned on() after being off()
+	    # Paint text at the edge of the display, not mid-scroll
+	    if self._reset.isSet():
+		pos = { self.TOP_ROW : canvas.width,
+			self.MIDDLE_ROW : canvas.width,
+			self.BOTTOM_ROW : canvas.width }
+		line_len = { self.TOP_ROW: None, self.MIDDLE_ROW: None, self.BOTTOM_ROW: None }
+		self._reset.clear()
+
+	    # The display has text on it, not clear
+	    self._isClear.clear()
 
 	    # Turn off all the pixels before lighting up new ones
 	    # Or else all will be on after a while
@@ -153,6 +199,11 @@ class Display():
             time.sleep(0.1)
 	    # Draw the canvas we just made
             canvas = self.matrix.SwapOnVSync(canvas) 
+
+    # Update time every second
+    def _watch_the_time(self):
+	self.on_screen[self.TOP_ROW]['text'] = time.strftime("%H:%M %p")
+	threading.Timer(1, self._watch_the_time).start()
 
     # Requires a row.
     # Given only a row it will blank that row, removing all messages for the row
