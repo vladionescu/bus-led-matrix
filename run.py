@@ -7,7 +7,7 @@ from libcmdqueue import CmdQueue
 
 stop_busses = threading.Event()
 
-# Gets bus times from NextBus and updates the display every refresh_rate seconds until on_time seconds have passwd, then turns off 
+# Gets bus times from NextBus and updates the display every refresh_rate seconds
 # Middle row: Next <bus number>
 # Bottom row: x, y, z mins
 def _busses(display, refresh_rate):
@@ -76,7 +76,6 @@ def main():
 	  help="Enable debug output.")
 
 	args = vars(parser.parse_args())
-	display_on_time = 10
 
 	if args["verbose"]:
 	    logger = logging.getLogger()
