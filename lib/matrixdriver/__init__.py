@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import argparse, time, sys, os, threading
+import logging, threading, time, sys
 from rgbmatrix import RGBMatrix, graphics
 
 class Display(threading.Thread):
@@ -133,7 +133,7 @@ class Display(threading.Thread):
 	self.on_screen[row]['current_index'] = msg_index
 
     def _draw_screen(self):
-        print("Display is running")
+        logging.debug("Display thread is running")
 
         canvas = self.matrix.CreateFrameCanvas()
 	
@@ -213,7 +213,7 @@ class Display(threading.Thread):
     # To set the row to mutliple messages, pass the above and the msg_indexes you want to set, no index gaps!
     # Setting instant will cause the update to be immediate, ignoring scrolling text
     def set_row(self, row=None, text='', font=None, scroll=False, msg_index=None, instant=True):
-	print("Setting row")
+	logging.debug("Setting row %s to %s", row, text)
 	if row is None:
 	    raise ValueError('Need to know what row to set')
 	    return False
@@ -246,5 +246,5 @@ class Display(threading.Thread):
 
 # Main function
 if __name__ == "__main__":
-    print "Nothing to do. This is a module."
+    logging.error("Nothing to do. This is a module.")
     sys.exit(0)

@@ -87,27 +87,25 @@ def main():
 	commands = CmdQueue( args )
 	commands.daemon = True
 	commands.set_valid_commands( valid_commands )
+	commands.setName("CMDQUEUEXXX") # FIXME Set thread name, broken, why?
 	commands.start()
 	
 	logging.debug("Starting display thread, display is off")
 	display = Display( args )
 	display.daemon = True
+	display.setName("Display") # Set thread name
 	display.start()
 	display.off()
 
 	# Loop until ^C
 	for command in commands.get_commands():
 	    if command == 'display on':
-		# TODO move the display thread out of while True.
-		# display stuff should be setup with command thread.
-		# TODO rearchitect Display() to have on() and off() funcs
-		# call those here instead of spawning/killing threads
 		logging.debug("Turning display on")
 		display.on()
 
 		logging.debug("Starting NextBus API thread")
 		stop_busses.clear()
-		bus_thread = threading.Thread( target=_busses, args=(display, args['refresh']) )
+		bus_thread = threading.Thread( target=_busses, name="Nextbus", args=(display, args['refresh']) )
 		bus_thread.daemon = True
 		bus_thread.start()
 	    if command == 'display off':
@@ -116,7 +114,7 @@ def main():
 
 		stop_busses.set()
     except KeyboardInterrupt:
-	logging.info("Quitting. Waiting for display and MQTT threads to exit.")
+	logging.info("\nQuitting. Waiting for display and MQTT threads to exit.")
 
 	stop_busses.set()
 	# We could wait for the bus thread to stop any remaining IO
