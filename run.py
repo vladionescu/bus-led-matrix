@@ -114,7 +114,7 @@ def main():
 
 		stop_busses.set()
     except KeyboardInterrupt:
-	logging.info("\nQuitting. Waiting for display and MQTT threads to exit.")
+	logging.info("Quitting. Waiting for display and MQTT threads to exit.")
 
 	stop_busses.set()
 	# We could wait for the bus thread to stop any remaining IO
