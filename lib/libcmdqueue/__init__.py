@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import argparse, sys
+import argparse, logging, sys
 import threading, Queue
 import paho.mqtt.client as mqtt
 
@@ -53,17 +53,19 @@ class CmdQueue(threading.Thread):
 
     # Set the array of acceptable commands
     def set_valid_commands(self, command_array):
-	print("Valid commands: " + str(command_array))
+	logging.debug("Valid commands: %s", str(command_array))
 	self.valid_commands = command_array
 
     # The callback for when the client receives a CONNACK response from the server.
     def _on_connect(self, client, userdata, flags, rc):
-	print("MQTT result code " + str(rc) + ": " + mqtt.connack_string(rc))
+	threading.currentThread().setName("CmdQueue")
+
+	logging.debug("MQTT result code %d: %s", rc, mqtt.connack_string(rc))
 
 	# If the connection isn't successful.
 	# Stop trying to connect and kill the thread.
 	if rc != 0:
-	    print("Stopping connection attempts to " + str(self.host) + "#" + str(self.topic) + " as " + str(self.clientid))
+	    logging.debug("Stopping connection attempts to " + str(self.host) + "#" + str(self.topic) + " as " + str(self.clientid))
 	    client.disconnect()
 
 	# Subscribing in _on_connect() means that if we lose the connection and
@@ -72,12 +74,12 @@ class CmdQueue(threading.Thread):
 
     # The callback for when a PUBLISH message is received from the server.
     def _on_message(self, client, userdata, msg):
-	print("MQTT rx: "+msg.topic+" ( "+str(msg.payload)+" )")
+	logging.debug("MQTT rx: "+msg.topic+" ( "+str(msg.payload)+" )")
 
 	message = msg.payload.lower()
 
 	if message in self.valid_commands:
-	    print ("+Q: "+message)
+	    logging.debug("+Q: "+message)
 
 	    # Queue the command, but only if there is a free command slot
 	    # If the queue is full, drop the command
@@ -88,5 +90,5 @@ class CmdQueue(threading.Thread):
 
 # Main function
 if __name__ == "__main__":
-    print "Nothing to do. This is a module."
+    logging.error("Nothing to do. This is a module.")
     sys.exit(0)

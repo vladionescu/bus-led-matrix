@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import argparse, sys, threading
+import argparse, logging, sys, threading
 sys.path.append('./lib')
 from matrixdriver import Display
 from libnextbus import Nextbus
@@ -19,8 +19,7 @@ def _busses(display, refresh_rate):
 
 	    bus_api = Nextbus(agency=agency, route=route, stop=stop)
 	    predictions = bus_api.nextbus()
-	    print "Next " + route + " in "
-	    print predictions
+	    logging.debug("Next " + route + " in " + str(predictions))
 
 	    display.set_row( display.MIDDLE_ROW, text='Next '+route, instant=True )
 	    display.set_row( display.BOTTOM_ROW, text=', '.join(predictions)+' mins', scroll=True, instant=True )
@@ -37,7 +36,10 @@ def _busses(display, refresh_rate):
 # Main function
 def main():
     try:
-	print("Press CTRL-C to quit")
+	# By default log INFO and above, drop to DEBUG if --verbose
+	logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)-8s - %(threadName)-12s (%(module)-8s): %(message)s')
+
+	logging.info("Press CTRL-C to quit")
 
 	parser = argparse.ArgumentParser()
 
@@ -70,19 +72,25 @@ def main():
 	parser.add_argument("-T", "--topic", default="display-commands",
 	  help="MQTT broker topic. Default: display-commands",
 	  action="store")
+	parser.add_argument("-v", "--verbose", action="store_true",
+	  help="Enable debug output.")
 
 	args = vars(parser.parse_args())
 	display_on_time = 10
 
+	if args["verbose"]:
+	    logger = logging.getLogger()
+	    logger.setLevel(logging.DEBUG)
+
 	valid_commands = ['display on', 'display off']
 
-	print("Starting MQTT thread, listening for commands")
+	logging.debug("Starting MQTT thread, listening for commands")
 	commands = CmdQueue( args )
 	commands.daemon = True
 	commands.set_valid_commands( valid_commands )
 	commands.start()
 	
-	print("Starting display thread")
+	logging.debug("Starting display thread, display is off")
 	display = Display( args )
 	display.daemon = True
 	display.start()
@@ -95,21 +103,21 @@ def main():
 		# display stuff should be setup with command thread.
 		# TODO rearchitect Display() to have on() and off() funcs
 		# call those here instead of spawning/killing threads
-		print("Turning display on")
+		logging.debug("Turning display on")
 		display.on()
 
-		print("Starting NextBus API thread")
+		logging.debug("Starting NextBus API thread")
 		stop_busses.clear()
 		bus_thread = threading.Thread( target=_busses, args=(display, args['refresh']) )
 		bus_thread.daemon = True
 		bus_thread.start()
 	    if command == 'display off':
-		print("Turning display off")
+		logging.debug("Turning display off")
 		display.off()
 
 		stop_busses.set()
     except KeyboardInterrupt:
-	print "\nExiting\n"
+	logging.info("Quitting. Waiting for display and MQTT threads to exit.")
 
 	stop_busses.set()
 	# We could wait for the bus thread to stop any remaining IO
