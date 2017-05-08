@@ -1,65 +1,11 @@
 #!/usr/bin/env python
-import argparse, time, sys, os, threading
-import Queue
-import paho.mqtt.client as mqtt
+import argparse, sys, threading
 sys.path.append('./lib')
 from matrixdriver import Display
 from libnextbus import Nextbus
+from libcmdqueue import CmdQueue
 
-get_commands = threading.Event()
 stop_busses = threading.Event()
-
-# Command slots, max 5 can be queued until the server refuses to queue more
-commands_q = Queue.Queue(5)
-
-valid_commands = ['display on', 'display off']
-
-# Command thread, loops listening to the MQTT topic it's subscribed to
-def _mqtt_sub():
-    BROKER = "192.168.1.201"
-    CLIENT_ID = "dobby-display"
-    TOPIC = "commands"
-
-    # The callback for when the client receives a CONNACK response from the server.
-    def on_connect(client, userdata, flags, rc):
-	print("Connected with result code "+str(rc))
-
-	# Subscribing in on_connect() means that if we lose the connection and
-	# reconnect then subscriptions will be renewed.
-	client.subscribe(TOPIC)
-
-    # The callback for when a PUBLISH message is received from the server.
-    def on_message(client, userdata, msg):
-	print("MQTT rx: "+msg.topic+" ( "+str(msg.payload)+" )")
-
-	message = msg.payload.lower()
-
-	if message in valid_commands:
-	    print ("+Q: "+message)
-
-	    # Queue the command, but only if there is a free command slot
-	    try:
-		commands_q.put(message, False)
-
-		# The display.off() must be called twice, so queue it twice
-		#if message == 'display off':
-		#    commands_q.put(message, False)
-	    except Queue.Full:
-		pass
-
-    client = mqtt.Client(client_id=CLIENT_ID)
-    client.on_connect = on_connect
-    client.on_message = on_message
-
-    client.connect(BROKER, 1883, 60)
-
-    while get_commands.isSet():
-	# Blocking call that processes network traffic, dispatches callbacks and
-	# handles reconnecting. Loops every 0.25 seconds.
-	client.loop(0.25)
-    else:
-	# Disconnect cleanly
-	client.disconnect()
 
 # Gets bus times from NextBus and updates the display every refresh_rate seconds
 # Middle row: Next <bus number>
@@ -91,41 +37,58 @@ def _busses(display, refresh_rate):
 # Main function
 def main():
     try:
-	print("Press CTRL-C to stop sample")
+	print("Press CTRL-C to quit")
 
 	parser = argparse.ArgumentParser()
 
-	parser.add_argument("-R", "--refresh", action="store", help="Refresh interval for bus times in seconds. Default: 120", default=120, type=int)
-	parser.add_argument("-r", "--rows", action="store", help="Display rows. 16 for 16x32, 32 for 32x32. Default: 32", default=32, type=int)
-	parser.add_argument("-c", "--chain", action="store", help="Daisy-chained boards. Default: 2.", default=2, type=int)
-	parser.add_argument("-P", "--parallel", action="store", help="For Plus-models or RPi2: parallel chains. 1..3. Default: 1", default=1, type = int)
-	parser.add_argument("-p", "--pwmbits", action="store", help="Bits used for PWM. Something between 1..11. Default: 11", default=11, type=int)
-	parser.add_argument("-l", "--luminance", action="store_true", help="Don't do luminance correction (CIE1931)")
-	parser.add_argument("-b", "--brightness", action="store", help="Sets brightness level. Default: 30. Range: 1..100", default=30, type=int)
+	parser.add_argument("-R", "--refresh", default=120,
+	  help="Refresh interval for bus times in seconds. Default: 120",
+	  action="store", type=int)
+	parser.add_argument("-r", "--rows", default=32,
+	  help="Display rows. 16 for 16x32, 32 for 32x32. Default: 32",
+	  action="store", type=int)
+	parser.add_argument("-c", "--chain", default=2,
+	  help="Daisy-chained boards. Default: 2.",
+	  action="store", type=int)
+	parser.add_argument("-P", "--parallel", default=1,
+	  help="For Plus-models or RPi2: parallel chains. 1..3. Default: 1",
+	  action="store", type=int)
+	parser.add_argument("-p", "--pwmbits", default=11,
+	  help="Bits used for PWM. Range 1..11. Default: 11",
+	  action="store", type=int)
+	parser.add_argument("-l", "--luminance", action="store_true",
+	  help="Don't do luminance correction (CIE1931)")
+	parser.add_argument("-b", "--brightness", default=30,
+	  help="Sets brightness level. Range: 1..100. Default: 30",
+	  action="store", type=int)
+	parser.add_argument("-H", "--host", default="192.168.1.201",
+	  help="MQTT broker host. Default: 192.168.1.201",
+	  action="store")
+	parser.add_argument("-C", "--clientid", default="display",
+	  help="MQTT broker client ID (name). Default: display",
+	  action="store")
+	parser.add_argument("-T", "--topic", default="display-commands",
+	  help="MQTT broker topic. Default: display-commands",
+	  action="store")
 
 	args = vars(parser.parse_args())
 
-	get_commands.set()
+	valid_commands = ['display on', 'display off']
 
 	print("Starting MQTT thread, listening for commands")
-	command_thread = threading.Thread( target=_mqtt_sub )
-	command_thread.daemon = True
-	command_thread.start()
-
+	commands = CmdQueue( args )
+	commands.daemon = True
+	commands.set_valid_commands( valid_commands )
+	commands.start()
+	
 	print("Starting display thread")
 	display = Display( args )
 	display.daemon = True
 	display.start()
-	display.on()
+	display.off()
 
-	# Loop forever (until ^C)
-	while True:
-	    # Check if a command is available in the queue
-	    try:
-		command = commands_q.get(False)
-	    except Queue.Empty:
-		continue
-
+	# Loop until ^C
+	for command in commands.get_commands():
 	    if command == 'display on':
 		# TODO move the display thread out of while True.
 		# display stuff should be setup with command thread.
@@ -157,9 +120,8 @@ def main():
 	display.join(5)
 
 	# Stop the command thread
-	get_commands.clear()
 	# And wait for MQTT to disconnect from broker
-	command_thread.join()
+	commands.join()
 
 	sys.exit(0)
 
