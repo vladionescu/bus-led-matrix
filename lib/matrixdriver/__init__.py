@@ -46,11 +46,13 @@ class Display(threading.Thread):
 		{'font': self.REGULAR, 'scroll': True, 'text': 'https://gitlab.com/vladionescu/bus-led-matrix'}
 	    ]
 	}
+	self.on_time = 0
 	self._stop = threading.Event()
 	self._isOff = threading.Event()
 	self._isClear = threading.Event()
 	self._on = threading.Event()
 	self._reset = threading.Event()
+	self._enable_watchdog = threading.Event()
 
     # Ask the thread to die. Display._draw_screen() checks this every 0.1 seconds.
     def join(self, timeout=None):
@@ -83,6 +85,10 @@ class Display(threading.Thread):
 	    # So the first time the screen is drawn there is something there
 	    for row, index in msg_index.iteritems():
 		self._prepare_row(row, index)
+
+	    # Ensure the screen is turned off when on_time expires
+	    self._watchdog()
+	    self.enable_watchdog(True)
 
 	    # Update time every second
 	    self._watch_the_time()
@@ -246,6 +252,35 @@ class Display(threading.Thread):
 	self.to_be_displayed[row].insert(index, message)
 
 	return True
+
+    def set_on_time(self, seconds=0):
+	logging.debug("On time set to %d seconds", int(seconds))
+	self.on_time = int(seconds)
+
+    def add_on_time(self, seconds=0):
+	logging.debug("Added %d seconds of on time", int(seconds))
+	self.on_time += int(seconds)
+
+    def enable_watchdog(self, status=True):
+	if status:
+	    self._enable_watchdog.set()
+	else:
+	    self._enable_watchdog.clear()
+
+    # Turn off the display after on_time seconds have passed
+    def _watchdog(self):
+	if self._enable_watchdog.isSet():
+	    # If on_time is depleted and the screen is on, turn it off
+	    if self.on_time <= 0:
+		if not self._isOff.isSet():
+		    logging.debug("On time depleted, watchdog is killing display")
+		    self.off()
+
+		    self.on_time = 0
+	    else:
+		self.on_time -= 1
+
+	threading.Timer(1, self._watchdog).start()
 
 # Main function
 if __name__ == "__main__":

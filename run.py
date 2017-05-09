@@ -6,6 +6,7 @@ from libnextbus import Nextbus
 from libcmdqueue import CmdQueue
 
 stop_busses = threading.Event()
+stop_busses.set()
 
 # Gets bus times from NextBus and updates the display every refresh_rate seconds
 # Middle row: Next <bus route>
@@ -102,6 +103,7 @@ def main():
 	for command in commands.get_commands():
 	    if command == 'display on':
 		logging.debug("Turning display on")
+		display.add_on_time(5)
 		display.on()
 
 		if stop_busses.isSet():
