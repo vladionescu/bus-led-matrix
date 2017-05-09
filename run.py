@@ -8,7 +8,7 @@ from libcmdqueue import CmdQueue
 stop_busses = threading.Event()
 
 # Gets bus times from NextBus and updates the display every refresh_rate seconds
-# Middle row: Next <bus number>
+# Middle row: Next <bus route>
 # Bottom row: x, y, z mins
 def _busses(display, refresh_rate):
     try:
@@ -113,6 +113,7 @@ def main():
 		logging.debug("Turning display off")
 		display.off()
 
+		logging.debug("Asking NextBus API thread to die")
 		stop_busses.set()
     except KeyboardInterrupt:
 	logging.info("Quitting. Waiting for display and MQTT threads to exit.")
