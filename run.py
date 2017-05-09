@@ -104,11 +104,14 @@ def main():
 		logging.debug("Turning display on")
 		display.on()
 
-		logging.debug("Starting NextBus API thread")
-		stop_busses.clear()
-		bus_thread = threading.Thread( target=_busses, name="Nextbus", args=(display, args['refresh']) )
-		bus_thread.daemon = True
-		bus_thread.start()
+		if stop_busses.isSet():
+		    logging.debug("Starting NextBus API thread")
+		    stop_busses.clear()
+		    bus_thread = threading.Thread( target=_busses, name="Nextbus", args=(display, args['refresh']) )
+		    bus_thread.daemon = True
+		    bus_thread.start()
+		else:
+		    logging.debug("NextBus API thread is already running")
 	    if command == 'display off':
 		logging.debug("Turning display off")
 		display.off()
